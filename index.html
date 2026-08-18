@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wave Lab</title>
+    <style>
+      :root {
+        /* Surfaces */
+        --color-bg: #0b0f14;
+        --color-panel: #131a22;
+        --color-panel-raised: #1b2530;
+        --color-border: #26333f;
+
+        /* Text */
+        --color-text: #e6edf3;
+        --color-text-muted: #8b9aa7;
+
+        /* Accents */
+        --color-accent: #4cc2ff;
+        --color-accent-strong: #1a9fe0;
+        --color-danger: #ff6b6b;
+
+        /* Oscilloscope / CRT */
+        --scope-bg: #041008;
+        --scope-grid: rgba(64, 200, 120, 0.18);
+        --scope-grid-axis: rgba(64, 200, 120, 0.4);
+        --scope-phosphor: #46ff9c;
+        --scope-phosphor-glow: rgba(70, 255, 156, 0.55);
+
+        /* Spacing + shape */
+        --radius: 10px;
+        --radius-sm: 6px;
+        --gap: 16px;
+        --space: 12px;
+
+        --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: "SF Mono", "Roboto Mono", ui-monospace, Menlo, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: var(--font-ui);
+        line-height: 1.4;
+      }
+
+      /* --------------------------------------------------------- Header */
+
+      .app-header {
+        padding: var(--space) var(--gap);
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .app-title {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: 0.02em;
+      }
+
+      .app-subtitle {
+        margin: 4px 0 0;
+        color: var(--color-text-muted);
+        font-size: 0.875rem;
+      }
+
+      /* ----------------------------------------------------------- Body */
+
+      .app-body {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--gap);
+        padding: var(--gap);
+        min-height: 0;
+      }
+
+      .pane {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--color-panel);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+      }
+
+      .pane__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space);
+        padding: var(--space) var(--gap);
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .pane__title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: var(--space);
+      }
+
+      /* Off-screen helper (e.g. the copy fallback textarea), kept out of view. */
+      .offscreen {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+      }
+
+      /* ------------------------------------------------------ Wave bank */
+
+      .wave-list {
+        list-style: none;
+        margin: 0;
+        padding: var(--space) var(--gap);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space);
+        overflow-y: auto;
+      }
+
+      .wave-list__empty {
+        margin: 0;
+        padding: var(--gap);
+        color: var(--color-text-muted);
+        font-size: 0.875rem;
+      }
+
+      .wave-card {
+        display: grid;
+        grid-template-columns: auto auto auto repeat(4, 1fr) auto;
+        gap: var(--space);
+        align-items: end;
+        padding: var(--space);
+        background: var(--color-panel-raised);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+
+      /* Dim the editable fields of a disabled wave, but keep its switch clear. */
+      .wave-card--off .wave-card__field,
+      .wave-card--off .wave-card__swatch {
+        opacity: 0.45;
+      }
+
+      /* iPhone-style on/off switch. */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 24px;
+        align-self: center;
+        flex: none;
+      }
+
+      .switch__input {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+      }
+
+      .switch__slider {
+        position: absolute;
+        inset: 0;
+        background: var(--color-border);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .switch__slider::before {
+        content: "";
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        left: 3px;
+        top: 3px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        transition: transform 0.15s ease;
+      }
+
+      .switch__input:checked + .switch__slider {
+        background: #34c759; /* iOS green */
+      }
+
+      .switch__input:checked + .switch__slider::before {
+        transform: translateX(16px);
+      }
+
+      .switch__input:focus-visible + .switch__slider {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+      }
+
+      /* Segmented Y|X switch selecting which axis a wave feeds. */
+      .axis-switch {
+        position: relative;
+        display: inline-block;
+        width: 52px;
+        height: 24px;
+        align-self: center;
+        flex: none;
+      }
+
+      .axis-switch__input {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+      }
+
+      .axis-switch__track {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        cursor: pointer;
+        overflow: hidden;
+      }
+
+      /* The sliding highlight; sits under Y by default, X when checked. */
+      .axis-switch__track::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 50%;
+        height: 100%;
+        background: var(--color-accent-strong);
+        border-radius: 999px;
+        transition: transform 0.15s ease;
+      }
+
+      .axis-switch__opt {
+        position: relative;
+        z-index: 1;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--color-text-muted);
+        transition: color 0.15s ease;
+      }
+
+      /* Default (Y): left option active. */
+      .axis-switch__opt:first-child {
+        color: #04121c;
+      }
+
+      .axis-switch__input:checked + .axis-switch__track::before {
+        transform: translateX(100%);
+      }
+
+      .axis-switch__input:checked + .axis-switch__track .axis-switch__opt:first-child {
+        color: var(--color-text-muted);
+      }
+
+      .axis-switch__input:checked + .axis-switch__track .axis-switch__opt:last-child {
+        color: #04121c;
+      }
+
+      .axis-switch__input:focus-visible + .axis-switch__track {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+      }
+
+      .wave-card__field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      /* Identity color for the wave, matching its trace in "separate" mode. */
+      .wave-card__swatch {
+        align-self: center;
+        width: 14px;
+        height: 14px;
+      }
+
+      .wave-card__inputgroup {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .wave-card__inputgroup .wave-card__input {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .wave-card__unit {
+        color: var(--color-text-muted);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+      }
+
+      .wave-card__input {
+        width: 100%;
+        padding: 6px 8px;
+        background: var(--color-bg);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+      }
+
+      .wave-card__input:focus {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 1px;
+      }
+
+      /* ----------------------------------------------------- Scope pane */
+
+      .scope {
+        flex: 1;
+        min-height: 0;
+        padding: var(--gap);
+      }
+
+      .scope__screen {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--scope-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+
+      .scope-controls {
+        display: flex;
+        align-items: end;
+        gap: var(--gap);
+        padding: var(--space) var(--gap);
+        border-top: 1px solid var(--color-border);
+      }
+
+      .control {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .control__label {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+      }
+
+      .control__input {
+        padding: 6px 8px;
+        background: var(--color-bg);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+      }
+
+      /* ---------------------------------------------------------- Buttons */
+
+      .button {
+        padding: 8px 14px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        background: var(--color-panel-raised);
+        color: var(--color-text);
+        font-family: var(--font-ui);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+
+      .button:hover {
+        border-color: var(--color-accent);
+      }
+
+      .button:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 1px;
+      }
+
+      .button--primary {
+        background: var(--color-accent-strong);
+        border-color: var(--color-accent-strong);
+        color: #04121c;
+        font-weight: 600;
+      }
+
+      .button--primary:hover {
+        background: var(--color-accent);
+        border-color: var(--color-accent);
+      }
+
+      /* Load-combo dropdown: at least twice the natural control width. */
+      .preset-select {
+        min-width: 180px;
+      }
+
+      /* Unsaved edits: the Save button breathes a soft green. */
+      .button--dirty {
+        animation: save-pulse 1.6s ease-in-out infinite;
+      }
+
+      @keyframes save-pulse {
+        0%,
+        100% {
+          background: var(--color-panel-raised);
+          border-color: var(--color-border);
+          box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
+        }
+        50% {
+          background: rgba(46, 204, 113, 0.28);
+          border-color: #2ecc71;
+          box-shadow: 0 0 8px 1px rgba(46, 204, 113, 0.45);
+        }
+      }
+
+      .button--play {
+        margin-left: auto;
+        min-width: 84px;
+      }
+
+      .button--play[aria-pressed="true"] {
+        background: var(--scope-phosphor);
+        border-color: var(--scope-phosphor);
+        color: #032013;
+        font-weight: 600;
+      }
+
+      /* Toggle buttons are blue when activated (aria-pressed), gray otherwise. */
+      .button--toggle[aria-pressed="true"] {
+        background: var(--color-accent-strong);
+        border-color: var(--color-accent-strong);
+        color: #04121c;
+        font-weight: 600;
+      }
+
+      .wave-card__remove {
+        align-self: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        background: transparent;
+        border: none;
+        color: var(--color-danger);
+        font-size: 1.25rem;
+        line-height: 1;
+      }
+
+      .wave-card__remove:hover {
+        background: var(--color-danger);
+        border: none;
+        color: #fff;
+      }
+
+      /* -------------------------------------------------------- Responsive */
+
+      @media (max-width: 860px) {
+        .app-body {
+          grid-template-columns: 1fr;
+        }
+
+        .scope {
+          min-height: 320px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1 class="app-title">Wave Lab</h1>
+      <p class="app-subtitle">Custom Made For Zoe</p>
+    </header>
+
+    <main class="app-body">
+      <section class="pane pane--waves" aria-label="Wave bank">
+        <div class="pane__header">
+          <h2 class="pane__title">Waves</h2>
+          <div class="toolbar">
+            <button type="button" class="button" data-role="new-combo">New</button>
+            <select
+              class="control__input preset-select"
+              data-role="preset-select"
+              aria-label="Load a saved wave combo"
+              title="Load a saved wave combo"
+            ></select>
+            <button type="button" class="button" data-role="save-combo">Save</button>
+            <button type="button" class="button" data-role="copy-combo">Copy</button>
+            <button type="button" class="button" data-role="paste-combo">Paste</button>
+            <button type="button" class="button button--primary" data-role="add-wave">
+              + Add wave
+            </button>
+          </div>
+        </div>
+        <ol class="wave-list" data-role="wave-list"></ol>
+        <p class="wave-list__empty" data-role="wave-empty" hidden>
+          No waves yet. Add one to start.
+        </p>
+      </section>
+
+      <section class="pane pane--scope" aria-label="Oscilloscope">
+        <div class="pane__header">
+          <h2 class="pane__title">Oscilloscope</h2>
+        </div>
+        <div class="scope">
+          <canvas class="scope__screen" data-role="scope-canvas"></canvas>
+        </div>
+        <div class="scope-controls" data-role="scope-controls">
+          <label class="control">
+            <span class="control__label">Time / div</span>
+            <select class="control__input" data-role="time-scale"></select>
+          </label>
+          <label class="control">
+            <span class="control__label">Volts / div</span>
+            <select class="control__input" data-role="vertical-scale"></select>
+          </label>
+          <button type="button" class="button button--toggle" data-role="trigger-toggle" aria-pressed="true">
+            Trigger
+          </button>
+          <button type="button" class="button button--toggle" data-role="mode-toggle" aria-pressed="true">
+            Sum
+          </button>
+          <button type="button" class="button button--play" data-role="play-toggle" aria-pressed="false">
+            Play
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      "use strict";
+
+      /*
+       * Everything below runs in one classic script (no ES modules) so the
+       * page works from file://. It is organized into the same units a
+       * multi-file build would use, in dependency order:
+       *
+       *   1. DSP           - the one wave formula
+       *   2. Wave          - a single sine component
+       *   3. WaveBank      - the one mutable store
+       *   4. Oscilloscope  - the CRT renderer
+       *   5. AudioEngine   - AudioContext + worklet playback
+       *   6. WavePanel     - left-pane DOM
+       *   7. ScopePanel    - scope-control DOM
+       *   8. main()        - composition root
+       */
+      (function () {
+        // =============================================================
+        // 1. DSP — the single source of truth for wave math.
+        //    value = amplitude * sin(2*pi*frequencyHz * t + phaseRadians)
+        // =============================================================
+
+        const TWO_PI = 2 * Math.PI;
+
+        // Supported waveforms. The order here is the order shown in the UI.
+        const WAVE_TYPES = ["sine", "sawtooth", "square", "triangle"];
+
+        // Which plot axis a wave feeds. "y" is the normal y-vs-t trace; marking
+        // any wave "x" switches the scope into y-vs-x (parametric) mode.
+        const WAVE_AXES = ["y", "x"];
+
+        /**
+         * Unit-amplitude shape for a waveform at phase `theta` (radians) /
+         * `cycles` (whole+fractional periods). All shapes span [-1, 1] and are
+         * phase-aligned with sine (zero and rising at the start of a cycle,
+         * except sawtooth which ramps). Must stay in lockstep with the copy
+         * inlined in SUM_PROCESSOR_SOURCE below.
+         */
+        function waveform(type, theta, cycles) {
+          switch (type) {
+            case "square":
+              return Math.sin(theta) >= 0 ? 1 : -1;
+            case "sawtooth":
+              return 2 * (cycles - Math.floor(cycles + 0.5));
+            case "triangle": {
+              // Phase shifted a quarter cycle so it starts at 0 and rises,
+              // matching sine's alignment. Pure arithmetic on the phase ramp.
+              const p = cycles - 0.25;
+              const frac = p - Math.floor(p);
+              return 4 * Math.abs(frac - 0.5) - 1;
+            }
+            case "sine":
+            default:
+              return Math.sin(theta);
+          }
+        }
+
+        function sampleWave(wave, t) {
+          const cycles = wave.frequencyHz * t + wave.phaseRadians / TWO_PI;
+          return wave.amplitude * waveform(wave.type, TWO_PI * cycles, cycles);
+        }
+
+        function sampleSum(waves, t) {
+          let total = 0;
+          for (let i = 0; i < waves.length; i++) {
+            if (waves[i].enabled === true) {
+              total += sampleWave(waves[i], t);
+            }
+          }
+          return total;
+        }
+
+        // =============================================================
+        // 2. Wave — a single sine component.
+        //    Phase is stored in radians; the UI edits degrees.
+        // =============================================================
+
+        const DEG_TO_RAD = Math.PI / 180;
+        const RAD_TO_DEG = 180 / Math.PI;
+
+        let nextWaveId = 1;
+
+        class Wave {
+          constructor({
+            frequencyHz,
+            amplitude,
+            phaseRadians = 0,
+            type = "sine",
+            enabled = true,
+            axis = "y",
+          }) {
+            this.id = nextWaveId;
+            nextWaveId++;
+
+            this.frequencyHz = frequencyHz;
+            this.amplitude = amplitude;
+            this.phaseRadians = phaseRadians;
+            this.type = type;
+            this.enabled = enabled;
+            this.axis = axis;
+          }
+
+          get phaseDegrees() {
+            return this.phaseRadians * RAD_TO_DEG;
+          }
+
+          set phaseDegrees(degrees) {
+            this.phaseRadians = degrees * DEG_TO_RAD;
+          }
+
+          sampleAt(t) {
+            return sampleWave(this, t);
+          }
+
+          toWorkletDto() {
+            return {
+              id: this.id,
+              frequencyHz: this.frequencyHz,
+              amplitude: this.amplitude,
+              phaseRadians: this.phaseRadians,
+              type: this.type,
+              enabled: this.enabled,
+            };
+          }
+        }
+
+        // =============================================================
+        // 3. WaveBank — the one mutable store.
+        //    UI edits it; scope and audio subscribe to its `change` event.
+        // =============================================================
+
+        class WaveBank extends EventTarget {
+          constructor() {
+            super();
+            this._waves = [];
+          }
+
+          list() {
+            return this._waves.slice();
+          }
+
+          get size() {
+            return this._waves.length;
+          }
+
+          add(params) {
+            const wave = new Wave(params);
+            this._waves.push(wave);
+            this._emitChange({ type: "add", id: wave.id });
+            return wave;
+          }
+
+          remove(id) {
+            const index = this._waves.findIndex((wave) => wave.id === id);
+            if (index === -1) {
+              return false;
+            }
+            this._waves.splice(index, 1);
+            this._emitChange({ type: "remove", id });
+            return true;
+          }
+
+          update(id, patch) {
+            const wave = this._waves.find((candidate) => candidate.id === id);
+            if (wave === undefined) {
+              return false;
+            }
+            Object.assign(wave, patch);
+            this._emitChange({ type: "update", id });
+            return true;
+          }
+
+          // Replace every wave at once (e.g. from a pasted combo).
+          setAll(paramsList) {
+            this._waves = paramsList.map((params) => new Wave(params));
+            this._emitChange({ type: "replace", id: -1 });
+          }
+
+          /**
+           * @param {{ type: "add" | "remove" | "update", id: number }} change
+           * The `type` lets structural subscribers (the panel) skip a rebuild on
+           * value-only updates, while value subscribers (scope, audio) react to all.
+           */
+          _emitChange(change) {
+            this.dispatchEvent(
+              new CustomEvent("change", { detail: { ...change, waves: this.list() } }),
+            );
+          }
+        }
+
+        // =============================================================
+        // Shared trace palette — indexed by wave position. Used by both the
+        // oscilloscope (in "separate" mode) and the wave-panel color swatches
+        // so a wave and its trace always share one color.
+        // =============================================================
+
+        const SVG_NS = "http://www.w3.org/2000/svg";
+
+        // TODO: add more colors
+        const TRACE_COLORS = [
+          "#46ff9c",
+          "#4cc2ff",
+          "#ff6b6b",
+          "#ffd166",
+          "#c792ea",
+          "#f78c6c",
+          "#7bdff2",
+          "#f4a6d7",
+        ];
+
+        function traceColor(index) {
+          return TRACE_COLORS[index % TRACE_COLORS.length];
+        }
+
+        // =============================================================
+        // 4. Oscilloscope — CRT-style renderer with an optional edge trigger.
+        // =============================================================
+
+        const [DIVS_X, DIVS_Y] = [10, 8];
+
+        function performanceClock() {
+          return performance.now() / 1000;
+        }
+
+        class Oscilloscope {
+          constructor(canvas, bank, options = {}) {
+            this._canvas = canvas;
+            this._ctx = canvas.getContext("2d");
+            this._bank = bank;
+
+            this._secondsPerDiv = options.secondsPerDiv ?? 0.002;
+            this._unitsPerDiv = options.unitsPerDiv ?? 0.5;
+            this._clock = options.clock ?? performanceClock;
+            this._triggerEnabled = options.triggerEnabled ?? true;
+            this._displayMode = options.displayMode ?? "sum";
+
+            this._waves = bank.list();
+            this._running = false;
+            this._frame = 0;
+
+            this._cssWidth = 0;
+            this._cssHeight = 0;
+
+            this._onBankChange = (event) => {
+              this._waves = event.detail.waves;
+            };
+            this._onVisibilityChange = () => {
+              if (document.hidden) {
+                this.stop();
+              } else {
+                this.start();
+              }
+            };
+            this._tick = () => {
+              if (!this._running) {
+                return;
+              }
+              this._draw();
+              this._frame = requestAnimationFrame(this._tick);
+            };
+
+            this._resizeObserver = new ResizeObserver(() => this._syncCanvasSize());
+          }
+
+          setClock(clock) {
+            this._clock = clock ?? performanceClock;
+          }
+
+          setTimeScale(secondsPerDiv) {
+            this._secondsPerDiv = secondsPerDiv;
+          }
+
+          setVerticalScale(unitsPerDiv) {
+            this._unitsPerDiv = unitsPerDiv;
+          }
+
+          setTrigger(enabled) {
+            this._triggerEnabled = enabled;
+          }
+
+          // @param {"sum" | "separate"} mode
+          setDisplayMode(mode) {
+            this._displayMode = mode;
+          }
+
+          start() {
+            if (this._running) {
+              return;
+            }
+            this._running = true;
+            this._syncCanvasSize();
+            this._frame = requestAnimationFrame(this._tick);
+          }
+
+          stop() {
+            this._running = false;
+            if (this._frame !== 0) {
+              cancelAnimationFrame(this._frame);
+              this._frame = 0;
+            }
+          }
+
+          connect() {
+            this._bank.addEventListener("change", this._onBankChange);
+            this._resizeObserver.observe(this._canvas);
+            document.addEventListener("visibilitychange", this._onVisibilityChange);
+            this.start();
+          }
+
+          disconnect() {
+            this.stop();
+            this._bank.removeEventListener("change", this._onBankChange);
+            this._resizeObserver.disconnect();
+            document.removeEventListener("visibilitychange", this._onVisibilityChange);
+          }
+
+          _syncCanvasSize() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = this._canvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) {
+              return;
+            }
+
+            this._cssWidth = rect.width;
+            this._cssHeight = rect.height;
+
+            const pixelWidth = Math.round(rect.width * dpr);
+            const pixelHeight = Math.round(rect.height * dpr);
+            if (this._canvas.width !== pixelWidth || this._canvas.height !== pixelHeight) {
+              this._canvas.width = pixelWidth;
+              this._canvas.height = pixelHeight;
+            }
+            this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          }
+
+          _draw() {
+            const ctx = this._ctx;
+            const width = this._cssWidth;
+            const height = this._cssHeight;
+            if (width === 0 || height === 0) {
+              return;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+            this._drawGraticule(ctx, width, height);
+            this._drawTrace(ctx, width, height);
+          }
+
+          _drawGraticule(ctx, width, height) {
+            const styles = getComputedStyle(this._canvas);
+            const gridColor = styles.getPropertyValue("--scope-grid").trim() || "rgba(64,200,120,0.18)";
+            const axisColor = styles.getPropertyValue("--scope-grid-axis").trim() || "rgba(64,200,120,0.4)";
+
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = gridColor;
+
+            ctx.beginPath();
+            for (let i = 1; i < DIVS_X; i++) {
+              const x = (i / DIVS_X) * width;
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x, height);
+            }
+            for (let i = 1; i < DIVS_Y; i++) {
+              const y = (i / DIVS_Y) * height;
+              ctx.moveTo(0, y);
+              ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = axisColor;
+            ctx.beginPath();
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+          }
+
+          _drawTrace(ctx, width, height) {
+            const pixelsPerDiv = width / DIVS_X;
+            const secondsPerPixel = this._secondsPerDiv / pixelsPerDiv;
+            const unitsPerPixel = this._unitsPerDiv / (height / DIVS_Y);
+            const midY = height / 2;
+            const tStart = this._computeTraceStart(width, secondsPerPixel);
+
+            ctx.lineWidth = 2;
+            ctx.lineJoin = "round";
+            ctx.shadowBlur = 8;
+
+            // Any enabled wave marked "x" switches to y-vs-x (parametric) mode,
+            // where time is swept internally and no longer maps to a screen axis.
+            // The Sum/Separate mode does not apply in X-Y.
+            const hasXAxis = this._waves.some((wave) => wave.enabled !== false && wave.axis === "x");
+            if (hasXAxis) {
+              this._drawXY(ctx, width, height, tStart, secondsPerPixel);
+              ctx.shadowBlur = 0;
+              return;
+            }
+
+            if (this._displayMode === "separate") {
+              // One colored trace per enabled wave, drawn without summing.
+              this._waves.forEach((wave, index) => {
+                if (wave.enabled === false) {
+                  return;
+                }
+                const color = traceColor(index);
+                this._strokeTrace(ctx, width, midY, tStart, secondsPerPixel, unitsPerPixel, color, color, (t) =>
+                  sampleWave(wave, t),
+                );
+              });
+            } else {
+              const styles = getComputedStyle(this._canvas);
+              const phosphor = styles.getPropertyValue("--scope-phosphor").trim() || "#46ff9c";
+              const glow = styles.getPropertyValue("--scope-phosphor-glow").trim() || "rgba(70,255,156,0.55)";
+              this._strokeTrace(ctx, width, midY, tStart, secondsPerPixel, unitsPerPixel, phosphor, glow, (t) =>
+                sampleSum(this._waves, t),
+              );
+            }
+
+            ctx.shadowBlur = 0;
+          }
+
+          // Stroke a single trace by sampling `sampleFn(t)` across every column.
+          _strokeTrace(ctx, width, midY, tStart, secondsPerPixel, unitsPerPixel, stroke, glow, sampleFn) {
+            ctx.strokeStyle = stroke;
+            ctx.shadowColor = glow;
+            ctx.beginPath();
+            for (let x = 0; x <= width; x++) {
+              const t = tStart + x * secondsPerPixel;
+              const y = midY - sampleFn(t) / unitsPerPixel;
+              if (x === 0) {
+                ctx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+              }
+            }
+            ctx.stroke();
+          }
+
+          /**
+           * y-vs-x (parametric) trace. All enabled "x" waves sum to the
+           * horizontal coordinate, all enabled "y" waves to the vertical one;
+           * time is swept internally across the current time window (so Time/div
+           * sets how much of the path is drawn) and Trigger sets its start.
+           */
+          _drawXY(ctx, width, height, tStart, secondsPerPixel) {
+            const xWaves = this._waves.filter((wave) => wave.axis === "x");
+            const yWaves = this._waves.filter((wave) => wave.axis !== "x");
+
+            const centerX = width / 2;
+            const midY = height / 2;
+            const unitsPerPixelX = this._unitsPerDiv / (width / DIVS_X);
+            const unitsPerPixelY = this._unitsPerDiv / (height / DIVS_Y);
+
+            const windowDuration = width * secondsPerPixel;
+            // Oversample relative to width so curved paths stay smooth.
+            const samples = Math.max(2, Math.round(width * 3));
+            const dt = windowDuration / samples;
+
+            const styles = getComputedStyle(this._canvas);
+            const phosphor = styles.getPropertyValue("--scope-phosphor").trim() || "#46ff9c";
+            const glow = styles.getPropertyValue("--scope-phosphor-glow").trim() || "rgba(70,255,156,0.55)";
+
+            ctx.strokeStyle = phosphor;
+            ctx.shadowColor = glow;
+            ctx.beginPath();
+            for (let i = 0; i <= samples; i++) {
+              const t = tStart + i * dt;
+              const px = centerX + sampleSum(xWaves, t) / unitsPerPixelX;
+              const py = midY - sampleSum(yWaves, t) / unitsPerPixelY;
+              if (i === 0) {
+                ctx.moveTo(px, py);
+              } else {
+                ctx.lineTo(px, py);
+              }
+            }
+            ctx.stroke();
+          }
+
+          /**
+           * Time mapped to the left edge of the screen.
+           *
+           * Triggered: t=0 sits at the left edge, so the scope shows a clean,
+           * static function plot of the waveform (not tied to playback time).
+           * Free-running: the right edge is "now", so the trace scrolls live.
+           */
+          _computeTraceStart(width, secondsPerPixel) {
+            if (this._triggerEnabled) {
+              return 0;
+            }
+            const windowDuration = width * secondsPerPixel;
+            return this._clock() - windowDuration;
+          }
+        }
+
+        // =============================================================
+        // 5. AudioEngine — AudioContext lifecycle + worklet playback.
+        //
+        //    The worklet source is a string turned into a Blob URL so
+        //    addModule works from file://. The shared DSP functions are
+        //    injected into that string (see DSP_SOURCE), so the worklet and
+        //    the scope share a single source of truth for the wave math.
+        // =============================================================
+
+        // The waveform math, injected verbatim into the worklet below so it is
+        // defined exactly once. These functions are self-contained (only Math
+        // and TWO_PI), which is what makes toString() injection safe.
+        const DSP_SOURCE = [waveform, sampleWave, sampleSum].map((fn) => fn.toString()).join("\n\n");
+
+        const SUM_PROCESSOR_SOURCE = `
+          const TWO_PI = Math.PI * 2;
+
+          ${DSP_SOURCE}
+
+          class SumProcessor extends AudioWorkletProcessor {
+            constructor() {
+              super();
+              this._waves = [];
+              this._masterGain = 1;
+              this._sampleIndex = 0;
+
+              this.port.onmessage = (event) => {
+                const message = event.data;
+                if (message.type === "setWaves") {
+                  this._waves = message.waves;
+                  this._masterGain = message.masterGain;
+                }
+              };
+            }
+
+            process(_inputs, outputs) {
+              const output = outputs[0];
+              const channel = output[0];
+              const invSampleRate = 1 / sampleRate;
+              const waves = this._waves;
+              const gain = this._masterGain;
+
+              for (let i = 0; i < channel.length; i++) {
+                const sample = sampleSum(waves, this._sampleIndex * invSampleRate) * gain;
+                for (let c = 0; c < output.length; c++) {
+                  output[c][i] = sample;
+                }
+                this._sampleIndex++;
+              }
+
+              return true;
+            }
+          }
+
+          registerProcessor("sum-processor", SumProcessor);
+        `;
+
+        class AudioEngine extends EventTarget {
+          constructor(bank) {
+            super();
+            this._bank = bank;
+            this._context = null;
+            this._node = null;
+            this._gain = null;
+            this._playing = false;
+
+            this._onBankChange = () => this._pushWaves();
+            this._bank.addEventListener("change", this._onBankChange);
+          }
+
+          get isPlaying() {
+            return this._playing;
+          }
+
+          get clock() {
+            if (this._context === null) {
+              return null;
+            }
+            const context = this._context;
+            return () => context.currentTime;
+          }
+
+          async play() {
+            if (this._playing) {
+              return;
+            }
+            await this._ensureGraph();
+            await this._context.resume();
+            this._node.connect(this._gain);
+            this._playing = true;
+            this._pushWaves();
+            this._emitState();
+          }
+
+          stop() {
+            if (!this._playing) {
+              return;
+            }
+            if (this._node !== null) {
+              this._node.disconnect();
+            }
+            this._playing = false;
+            this._emitState();
+          }
+
+          async toggle() {
+            if (this._playing) {
+              this.stop();
+            } else {
+              await this.play();
+            }
+          }
+
+          async _ensureGraph() {
+            if (this._context !== null) {
+              return;
+            }
+            const context = new AudioContext();
+
+            const blob = new Blob([SUM_PROCESSOR_SOURCE], { type: "application/javascript" });
+            const url = URL.createObjectURL(blob);
+            try {
+              await context.audioWorklet.addModule(url);
+            } finally {
+              URL.revokeObjectURL(url);
+            }
+
+            const node = new AudioWorkletNode(context, "sum-processor", {
+              numberOfInputs: 0,
+              numberOfOutputs: 1,
+              outputChannelCount: [2],
+            });
+            const gain = new GainNode(context, { gain: 1 });
+            gain.connect(context.destination);
+
+            this._context = context;
+            this._node = node;
+            this._gain = gain;
+            this.dispatchEvent(new CustomEvent("contextready"));
+          }
+
+          _pushWaves() {
+            if (this._node === null) {
+              return;
+            }
+            const waves = this._bank
+              .list()
+              .filter((wave) => wave.enabled !== false)
+              .map((wave) => wave.toWorkletDto());
+            this._node.port.postMessage({
+              type: "setWaves",
+              waves,
+              masterGain: this._computeMasterGain(waves),
+            });
+          }
+
+          _computeMasterGain(waves) {
+            const totalAmplitude = waves.reduce((sum, wave) => sum + Math.abs(wave.amplitude), 0);
+            if (totalAmplitude <= 1) {
+              return 1;
+            }
+            return 1 / totalAmplitude;
+          }
+
+          _emitState() {
+            this.dispatchEvent(new CustomEvent("statechange", { detail: { playing: this._playing } }));
+          }
+        }
+
+        // =============================================================
+        // 6. WavePanel — left-pane DOM (pure UI, no DSP).
+        // =============================================================
+
+        const DEFAULT_WAVE = { frequencyHz: 220, amplitude: 1.0, phaseDegrees: 0, type: "sine" };
+
+        // `label` is not shown; it is used as the control's accessible name.
+        // `unit` is a short suffix shown after number inputs.
+        const WAVE_FIELDS = [
+          { key: "type", label: "Waveform type", kind: "select", options: WAVE_TYPES },
+          { key: "frequencyHz", label: "Frequency (Hz)", kind: "number", min: 1, max: 20000, step: 1, unit: "Hz" },
+          { key: "amplitude", label: "Amplitude (V)", kind: "number", min: -5, max: 5, step: 0.1, unit: "V" },
+          { key: "phaseDegrees", label: "Phase (degrees)", kind: "number", min: -360, max: 360, step: 1, unit: "\u03C6\u00B0" },
+        ];
+
+        function capitalize(text) {
+          return text.charAt(0).toUpperCase() + text.slice(1);
+        }
+
+        class WavePanel {
+          constructor(refs, bank) {
+            this._list = refs.list;
+            this._empty = refs.empty;
+            this._addButton = refs.addButton;
+            this._bank = bank;
+
+            this._addButton.addEventListener("click", () => {
+              this._bank.add({
+                frequencyHz: DEFAULT_WAVE.frequencyHz,
+                amplitude: DEFAULT_WAVE.amplitude,
+                phaseRadians: 0,
+                type: DEFAULT_WAVE.type,
+              });
+            });
+
+            // Commit on `change` (Enter, blur, or spinner) so the fields behave
+            // like normal inputs rather than reacting to every keystroke.
+            this._list.addEventListener("change", (event) => this._onFieldCommit(event));
+            this._list.addEventListener("click", (event) => this._onListClick(event));
+
+            this._bank.addEventListener("change", (event) => {
+              // Value edits originate from the inputs themselves; rebuilding the
+              // list on those would steal focus. Only add/remove change structure.
+              if (event.detail.type === "update") {
+                return;
+              }
+              this.render(event.detail.waves);
+            });
+          }
+
+          render(waves) {
+            this._empty.hidden = waves.length > 0;
+            this._list.replaceChildren(...waves.map((wave, index) => this._renderCard(wave, index)));
+          }
+
+          _renderCard(wave, index) {
+            const item = document.createElement("li");
+            item.className = wave.enabled === false ? "wave-card wave-card--off" : "wave-card";
+            item.dataset.waveId = String(wave.id);
+
+            item.appendChild(this._renderSwitch(wave));
+            item.appendChild(this._renderAxisSwitch(wave));
+            item.appendChild(this._renderSwatch(index));
+
+            for (const field of WAVE_FIELDS) {
+              item.appendChild(this._renderField(wave, field));
+            }
+
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "button wave-card__remove";
+            remove.dataset.role = "remove-wave";
+            remove.textContent = "\u00D7";
+            remove.setAttribute("aria-label", "Remove wave");
+            remove.title = "Remove wave";
+            item.appendChild(remove);
+
+            return item;
+          }
+
+          _renderSwitch(wave) {
+            const label = document.createElement("label");
+            label.className = "switch";
+            label.title = "Enable wave";
+
+            const input = document.createElement("input");
+            input.className = "switch__input";
+            input.type = "checkbox";
+            input.checked = wave.enabled !== false;
+            input.dataset.field = "enabled";
+            input.setAttribute("aria-label", "Enable wave");
+
+            const slider = document.createElement("span");
+            slider.className = "switch__slider";
+
+            label.append(input, slider);
+            return label;
+          }
+
+          _renderAxisSwitch(wave) {
+            const label = document.createElement("label");
+            label.className = "axis-switch";
+            label.title = "Plot axis: Y (y-vs-t) or X. Any X wave switches the scope to X-Y mode.";
+
+            const input = document.createElement("input");
+            input.className = "axis-switch__input";
+            input.type = "checkbox";
+            input.checked = wave.axis === "x";
+            input.dataset.field = "axis";
+            input.setAttribute("aria-label", "Plot axis, X or Y");
+
+            const track = document.createElement("span");
+            track.className = "axis-switch__track";
+
+            const optY = document.createElement("span");
+            optY.className = "axis-switch__opt";
+            optY.textContent = "Y";
+
+            const optX = document.createElement("span");
+            optX.className = "axis-switch__opt";
+            optX.textContent = "X";
+
+            track.append(optY, optX);
+            label.append(input, track);
+            return label;
+          }
+
+          _renderSwatch(index) {
+            // SVG with a `fill` attribute keeps the dynamic color out of inline
+            // CSS while still tracking the JS palette by wave position.
+            const svg = document.createElementNS(SVG_NS, "svg");
+            svg.setAttribute("class", "wave-card__swatch");
+            svg.setAttribute("viewBox", "0 0 10 10");
+            svg.setAttribute("aria-hidden", "true");
+
+            const rect = document.createElementNS(SVG_NS, "rect");
+            rect.setAttribute("width", "10");
+            rect.setAttribute("height", "10");
+            rect.setAttribute("rx", "2");
+            rect.setAttribute("fill", traceColor(index));
+
+            svg.appendChild(rect);
+            return svg;
+          }
+
+          _renderField(wave, field) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "wave-card__field";
+
+            if (field.kind === "select") {
+              wrapper.appendChild(this._renderSelect(wave, field));
+              return wrapper;
+            }
+
+            const input = this._renderNumber(wave, field);
+            if (field.unit === undefined) {
+              wrapper.appendChild(input);
+              return wrapper;
+            }
+
+            // Input with a trailing unit suffix (e.g. "440 Hz").
+            const group = document.createElement("div");
+            group.className = "wave-card__inputgroup";
+
+            const unit = document.createElement("span");
+            unit.className = "wave-card__unit";
+            unit.textContent = field.unit;
+
+            group.append(input, unit);
+            wrapper.appendChild(group);
+            return wrapper;
+          }
+
+          _renderNumber(wave, field) {
+            const input = document.createElement("input");
+            input.className = "wave-card__input";
+            input.type = "number";
+            input.min = String(field.min);
+            input.max = String(field.max);
+            input.step = String(field.step);
+            input.value = String(this._formatValue(wave[field.key]));
+            input.dataset.field = field.key;
+            input.setAttribute("aria-label", field.label);
+            input.title = field.label;
+            return input;
+          }
+
+          _renderSelect(wave, field) {
+            const select = document.createElement("select");
+            select.className = "wave-card__input";
+            select.dataset.field = field.key;
+            select.setAttribute("aria-label", field.label);
+            select.title = field.label;
+
+            for (const option of field.options) {
+              const element = document.createElement("option");
+              element.value = option;
+              element.textContent = capitalize(option);
+              select.appendChild(element);
+            }
+            select.value = wave[field.key];
+            return select;
+          }
+
+          _formatValue(value) {
+            return Math.round(value * 1000) / 1000;
+          }
+
+          _onFieldCommit(event) {
+            const control = event.target;
+            const isField = control instanceof HTMLInputElement || control instanceof HTMLSelectElement;
+            if (!isField) {
+              return;
+            }
+            const card = control.closest("[data-wave-id]");
+            if (card === null) {
+              return;
+            }
+
+            const id = Number(card.dataset.waveId);
+            const field = control.dataset.field;
+            if (field === undefined) {
+              return;
+            }
+
+            if (control instanceof HTMLInputElement && control.type === "checkbox") {
+              if (field === "axis") {
+                this._bank.update(id, { axis: control.checked ? "x" : "y" });
+                return;
+              }
+              // Toggle the dim class directly: value edits don't rebuild the list.
+              card.classList.toggle("wave-card--off", !control.checked);
+              this._bank.update(id, { [field]: control.checked });
+              return;
+            }
+
+            if (control instanceof HTMLSelectElement) {
+              this._bank.update(id, { [field]: control.value });
+              return;
+            }
+
+            const value = Number(control.value);
+            if (Number.isNaN(value)) {
+              return;
+            }
+            this._bank.update(id, { [field]: value });
+          }
+
+          _onListClick(event) {
+            const button = event.target;
+            if (!(button instanceof HTMLElement) || button.dataset.role !== "remove-wave") {
+              return;
+            }
+            const card = button.closest("[data-wave-id]");
+            if (card === null) {
+              return;
+            }
+            this._bank.remove(Number(card.dataset.waveId));
+          }
+        }
+
+        // =============================================================
+        // 7. ScopePanel — scope-control DOM (pure UI, no DSP).
+        // =============================================================
+
+        const TIME_SCALES = [
+          { label: "0.5 ms", secondsPerDiv: 0.0005 },
+          { label: "1 ms", secondsPerDiv: 0.001 },
+          { label: "2 ms", secondsPerDiv: 0.002 },
+          { label: "5 ms", secondsPerDiv: 0.005 },
+          { label: "10 ms", secondsPerDiv: 0.01 },
+          { label: "20 ms", secondsPerDiv: 0.02 },
+          { label: "50 ms", secondsPerDiv: 0.05 },
+          { label: "100 ms", secondsPerDiv: 0.1 },
+          { label: "200 ms", secondsPerDiv: 0.2 },
+          { label: "300 ms", secondsPerDiv: 0.3 },
+          { label: "400 ms", secondsPerDiv: 0.4 },
+          { label: "500 ms", secondsPerDiv: 0.5 },
+        ];
+
+        const VERTICAL_SCALES = [
+          { label: "0.1", unitsPerDiv: 0.1 },
+          { label: "0.25", unitsPerDiv: 0.25 },
+          { label: "0.5", unitsPerDiv: 0.5 },
+          { label: "1.0", unitsPerDiv: 1 },
+          { label: "2.0", unitsPerDiv: 2 },
+          { label: "3.0", unitsPerDiv: 3 },
+          { label: "4.0", unitsPerDiv: 4 },
+          { label: "5.0", unitsPerDiv: 5 },
+          { label: "10", unitsPerDiv: 10 },
+        ];
+
+        const DEFAULT_TIME_INDEX = 2; // 2 ms/div
+        const DEFAULT_VERTICAL_INDEX = 2; // 0.5 units/div
+        const DEFAULT_TRIGGER_ENABLED = true;
+        const DEFAULT_DISPLAY_MODE = "sum"; // "sum" | "separate"
+        const MODE_LABEL = "Sum"; // same button label for both regimes
+
+        class ScopePanel {
+          constructor(refs, handlers) {
+            this._timeSelect = refs.timeSelect;
+            this._verticalSelect = refs.verticalSelect;
+            this._triggerButton = refs.triggerButton;
+            this._modeButton = refs.modeButton;
+            this._playButton = refs.playButton;
+            this._handlers = handlers;
+
+            this._triggerEnabled = DEFAULT_TRIGGER_ENABLED;
+            this._displayMode = DEFAULT_DISPLAY_MODE;
+
+            this._populate();
+            this._bindEvents();
+            this._reflectTrigger();
+            this._reflectMode();
+          }
+
+          get defaults() {
+            return {
+              secondsPerDiv: TIME_SCALES[DEFAULT_TIME_INDEX].secondsPerDiv,
+              unitsPerDiv: VERTICAL_SCALES[DEFAULT_VERTICAL_INDEX].unitsPerDiv,
+              triggerEnabled: DEFAULT_TRIGGER_ENABLED,
+              displayMode: DEFAULT_DISPLAY_MODE,
+            };
+          }
+
+          setPlaying(playing) {
+            this._playButton.setAttribute("aria-pressed", String(playing));
+            this._playButton.textContent = playing ? "Stop" : "Play";
+          }
+
+          _populate() {
+            TIME_SCALES.forEach((scale, index) => {
+              this._timeSelect.appendChild(this._option(scale.label, index));
+            });
+            this._timeSelect.selectedIndex = DEFAULT_TIME_INDEX;
+
+            VERTICAL_SCALES.forEach((scale, index) => {
+              this._verticalSelect.appendChild(this._option(scale.label, index));
+            });
+            this._verticalSelect.selectedIndex = DEFAULT_VERTICAL_INDEX;
+          }
+
+          _option(label, index) {
+            const option = document.createElement("option");
+            option.value = String(index);
+            option.textContent = label;
+            return option;
+          }
+
+          _bindEvents() {
+            this._timeSelect.addEventListener("change", () => {
+              const scale = TIME_SCALES[Number(this._timeSelect.value)];
+              this._handlers.onTimeScale(scale.secondsPerDiv);
+            });
+
+            this._verticalSelect.addEventListener("change", () => {
+              const scale = VERTICAL_SCALES[Number(this._verticalSelect.value)];
+              this._handlers.onVerticalScale(scale.unitsPerDiv);
+            });
+
+            this._triggerButton.addEventListener("click", () => {
+              this._triggerEnabled = !this._triggerEnabled;
+              this._reflectTrigger();
+              this._handlers.onToggleTrigger(this._triggerEnabled);
+            });
+
+            this._modeButton.addEventListener("click", () => {
+              this._displayMode = this._displayMode === "sum" ? "separate" : "sum";
+              this._reflectMode();
+              this._handlers.onToggleMode(this._displayMode);
+            });
+
+            this._playButton.addEventListener("click", () => {
+              this._handlers.onTogglePlay();
+            });
+          }
+
+          _reflectTrigger() {
+            this._triggerButton.setAttribute("aria-pressed", String(this._triggerEnabled));
+          }
+
+          _reflectMode() {
+            // Activated (blue) means summing; the label stays the same in both
+            // regimes, so the active state is conveyed only through aria-pressed.
+            this._modeButton.setAttribute("aria-pressed", String(this._displayMode === "sum"));
+            this._modeButton.textContent = MODE_LABEL;
+          }
+        }
+
+        // =============================================================
+        // 8. Combo clipboard — serialize the wave combo to a shareable
+        //    string and load one back. Each wave is a self-describing JSON
+        //    object keyed by field, so the format stays backward/forward
+        //    compatible: unknown keys are ignored and missing ones fall back
+        //    to defaults. Example:
+        //    {"type":"wavelab","version":2,"waves":[
+        //      {"freqHz":440,"amp":1,"phaseDeg":0,"type":"sine",
+        //       "axis":"y","enabled":true}]}
+        // =============================================================
+
+        const COMBO_TYPE = "wavelab";
+        const COMBO_VERSION = 2;
+
+        function roundTo3(value) {
+          return Math.round(value * 1000) / 1000;
+        }
+
+        const WaveCodec = {
+          encode(waves) {
+            const payload = {
+              type: COMBO_TYPE,
+              version: COMBO_VERSION,
+              waves: waves.map((wave) => ({
+                freqHz: roundTo3(wave.frequencyHz),
+                amp: roundTo3(wave.amplitude),
+                phaseDeg: roundTo3(wave.phaseDegrees),
+                type: wave.type,
+                axis: wave.axis,
+                enabled: wave.enabled !== false,
+              })),
+            };
+            return JSON.stringify(payload);
+          },
+
+          /**
+           * Parse a combo string into wave params ready for WaveBank.setAll.
+           * Throws an Error with a human-readable message on malformed input.
+           */
+          decode(text) {
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (error) {
+              throw new Error("That does not look like a wave combo (invalid format).");
+            }
+
+            if (data === null || data.type !== COMBO_TYPE || !Array.isArray(data.waves)) {
+              throw new Error("That does not look like a wave combo.");
+            }
+
+            return data.waves.map((entry, index) => this._decodeWave(entry, index));
+          },
+
+          /**
+           * Decode one wave object. Missing optional fields (phase, type, axis,
+           * enabled) fall back to their defaults.
+           */
+          _decodeWave(entry, index) {
+            const where = `Wave ${index + 1} in the combo`;
+            if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+              throw new Error(`${where} is not a valid wave.`);
+            }
+
+            const frequencyHz = Number(entry.freqHz);
+            const amplitude = Number(entry.amp);
+            const phaseDeg = entry.phaseDeg === undefined ? 0 : Number(entry.phaseDeg);
+            if (![frequencyHz, amplitude, phaseDeg].every(Number.isFinite)) {
+              throw new Error(`${where} has invalid values.`);
+            }
+
+            const type = entry.type === undefined ? "sine" : String(entry.type);
+            if (!WAVE_TYPES.includes(type)) {
+              throw new Error(`${where} has an unknown type "${type}".`);
+            }
+
+            const axis = entry.axis === undefined ? "y" : String(entry.axis);
+            if (!WAVE_AXES.includes(axis)) {
+              throw new Error(`${where} has an unknown axis "${axis}".`);
+            }
+
+            const enabled = entry.enabled === undefined ? true : Boolean(entry.enabled);
+
+            return {
+              frequencyHz,
+              amplitude,
+              phaseRadians: phaseDeg * DEG_TO_RAD,
+              type,
+              axis,
+              enabled,
+            };
+          },
+        };
+
+        async function writeClipboard(text) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+              await navigator.clipboard.writeText(text);
+              return true;
+            } catch (error) {
+              // Fall through to the legacy path below.
+            }
+          }
+          return legacyCopy(text);
+        }
+
+        function legacyCopy(text) {
+          try {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.className = "offscreen";
+            textarea.setAttribute("readonly", "");
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand("copy");
+            document.body.removeChild(textarea);
+            return copied;
+          } catch (error) {
+            return false;
+          }
+        }
+
+        async function readClipboard() {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            try {
+              return await navigator.clipboard.readText();
+            } catch (error) {
+              // Fall through; caller will prompt instead.
+            }
+          }
+          return null;
+        }
+
+        class ComboClipboard {
+          constructor(bank, refs) {
+            this._bank = bank;
+            this._copyButton = refs.copyButton;
+            this._pasteButton = refs.pasteButton;
+
+            this._copyButton.addEventListener("click", () => this._copy());
+            this._pasteButton.addEventListener("click", () => this._paste());
+          }
+
+          async _copy() {
+            const text = WaveCodec.encode(this._bank.list());
+            const copied = await writeClipboard(text);
+            if (copied) {
+              this._flash(this._copyButton, "Copied!");
+            } else {
+              // Last resort: let the user copy it manually.
+              window.prompt("Copy this wave combo:", text);
+            }
+          }
+
+          async _paste() {
+            let text = await readClipboard();
+            if (text === null) {
+              text = window.prompt("Paste a wave combo string:") ?? "";
+            }
+            text = text.trim();
+            if (text === "") {
+              return;
+            }
+
+            let params;
+            try {
+              params = WaveCodec.decode(text);
+            } catch (error) {
+              window.alert(error.message);
+              return;
+            }
+            this._bank.setAll(params);
+          }
+
+          _flash(button, message) {
+            const original = button.textContent;
+            button.textContent = message;
+            button.disabled = true;
+            setTimeout(() => {
+              button.textContent = original;
+              button.disabled = false;
+            }, 1200);
+          }
+        }
+
+        // =============================================================
+        // 8b. Presets — named wave combos persisted in localStorage.
+        //     Stored as { name: comboString } using the WaveCodec format,
+        //     so on-disk presets share the same schema as copy/paste.
+        // =============================================================
+
+        const PRESET_STORAGE_KEY = "wavelab.presets";
+
+        const PresetStore = {
+          _read() {
+            try {
+              const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+              const data = raw ? JSON.parse(raw) : {};
+              return data !== null && typeof data === "object" ? data : {};
+            } catch (error) {
+              return {};
+            }
+          },
+
+          _write(data) {
+            window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(data));
+          },
+
+          names() {
+            return Object.keys(this._read()).sort((a, b) => a.localeCompare(b));
+          },
+
+          has(name) {
+            return Object.prototype.hasOwnProperty.call(this._read(), name);
+          },
+
+          save(name, waves) {
+            const data = this._read();
+            data[name] = WaveCodec.encode(waves);
+            this._write(data);
+          },
+
+          load(name) {
+            const combo = this._read()[name];
+            return combo === undefined ? null : WaveCodec.decode(combo);
+          },
+        };
+
+        class PresetPanel {
+          constructor(bank, refs) {
+            this._bank = bank;
+            this._select = refs.select;
+            this._saveButton = refs.saveButton;
+            this._newButton = refs.newButton;
+
+            // Name of the preset the bank currently represents (null = unnamed),
+            // and the encoded combo we last persisted for it. `_dirty` is derived
+            // by comparing the live bank against that snapshot.
+            this._currentName = null;
+            this._savedSnapshot = null;
+
+            this._newButton.addEventListener("click", () => this._new());
+            this._saveButton.addEventListener("click", () => this._save());
+            this._select.addEventListener("change", () => this._load());
+            this._bank.addEventListener("change", () => this._reflectDirty());
+
+            this._refresh();
+            this._reflectDirty();
+          }
+
+          get _isDirty() {
+            const current = WaveCodec.encode(this._bank.list());
+            if (this._savedSnapshot === null) {
+              // No named/saved baseline yet: dirty only if there is content.
+              return this._bank.size > 0;
+            }
+            return current !== this._savedSnapshot;
+          }
+
+          _reflectDirty() {
+            this._saveButton.classList.toggle("button--dirty", this._isDirty);
+          }
+
+          _new() {
+            if (this._isDirty && window.confirm("Save the current wave before starting new?")) {
+              this._save();
+            }
+            this._bank.setAll([]);
+            this._currentName = null;
+            this._savedSnapshot = null;
+            this._refresh();
+            this._reflectDirty();
+          }
+
+          _save() {
+            let name = this._currentName;
+            // Unnamed combos prompt once; named ones overwrite silently.
+            if (name === null) {
+              name = (window.prompt("Name this wave combo:") ?? "").trim();
+              if (name === "") {
+                return;
+              }
+              if (PresetStore.has(name) && !window.confirm(`Replace the saved combo "${name}"?`)) {
+                return;
+              }
+            }
+            try {
+              PresetStore.save(name, this._bank.list());
+            } catch (error) {
+              window.alert(`Could not save "${name}": ${error.message}`);
+              return;
+            }
+            this._currentName = name;
+            this._savedSnapshot = WaveCodec.encode(this._bank.list());
+            this._refresh();
+            this._reflectDirty();
+          }
+
+          _load() {
+            const name = this._select.value;
+            if (name === "" || name === this._currentName) {
+              this._select.value = this._currentName ?? "";
+              return;
+            }
+            let params;
+            try {
+              params = PresetStore.load(name);
+            } catch (error) {
+              window.alert(`Could not load "${name}": ${error.message}`);
+              this._select.value = this._currentName ?? "";
+              return;
+            }
+            if (params === null) {
+              this._select.value = this._currentName ?? "";
+              return;
+            }
+            this._bank.setAll(params);
+            this._currentName = name;
+            this._savedSnapshot = WaveCodec.encode(this._bank.list());
+            this._refresh();
+            this._reflectDirty();
+          }
+
+          _refresh() {
+            const names = PresetStore.names();
+            this._select.textContent = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = names.length > 0 ? "Load saved\u2026" : "No saved waves";
+            this._select.appendChild(placeholder);
+
+            for (const name of names) {
+              const option = document.createElement("option");
+              option.value = name;
+              option.textContent = name;
+              this._select.appendChild(option);
+            }
+            // Keep the dropdown parked on the active preset.
+            this._select.value = this._currentName ?? "";
+          }
+        }
+
+        // =============================================================
+        // 9. main() — composition root. Wiring only, no logic.
+        // =============================================================
+
+        function requireRole(role) {
+          const element = document.querySelector(`[data-role="${role}"]`);
+          if (element === null) {
+            throw new Error(`Missing required element: [data-role="${role}"]`);
+          }
+          return element;
+        }
+
+        function main() {
+          const bank = new WaveBank();
+
+          const wavePanel = new WavePanel(
+            {
+              list: requireRole("wave-list"),
+              empty: requireRole("wave-empty"),
+              addButton: requireRole("add-wave"),
+            },
+            bank,
+          );
+
+          const comboClipboard = new ComboClipboard(bank, {
+            copyButton: requireRole("copy-combo"),
+            pasteButton: requireRole("paste-combo"),
+          });
+
+          const presetPanel = new PresetPanel(bank, {
+            select: requireRole("preset-select"),
+            saveButton: requireRole("save-combo"),
+            newButton: requireRole("new-combo"),
+          });
+
+          const engine = new AudioEngine(bank);
+
+          const scopePanel = new ScopePanel(
+            {
+              timeSelect: requireRole("time-scale"),
+              verticalSelect: requireRole("vertical-scale"),
+              triggerButton: requireRole("trigger-toggle"),
+              modeButton: requireRole("mode-toggle"),
+              playButton: requireRole("play-toggle"),
+            },
+            {
+              onTimeScale: (secondsPerDiv) => scope.setTimeScale(secondsPerDiv),
+              onVerticalScale: (unitsPerDiv) => scope.setVerticalScale(unitsPerDiv),
+              onToggleTrigger: (enabled) => scope.setTrigger(enabled),
+              onToggleMode: (mode) => scope.setDisplayMode(mode),
+              onTogglePlay: () => {
+                engine.toggle().catch((error) => console.error("Audio playback failed", error));
+              },
+            },
+          );
+
+          const scope = new Oscilloscope(requireRole("scope-canvas"), bank, {
+            secondsPerDiv: scopePanel.defaults.secondsPerDiv,
+            unitsPerDiv: scopePanel.defaults.unitsPerDiv,
+            triggerEnabled: scopePanel.defaults.triggerEnabled,
+            displayMode: scopePanel.defaults.displayMode,
+            clock: performanceClock,
+          });
+
+          engine.addEventListener("contextready", () => {
+            scope.setClock(engine.clock ?? performanceClock);
+          });
+          engine.addEventListener("statechange", (event) => {
+            scopePanel.setPlaying(event.detail.playing);
+          });
+
+          scope.connect();
+
+          // Seed one audible starter wave (renders the panel via `change`).
+          bank.add({ frequencyHz: 440, amplitude: 1.0, phaseRadians: 0 });
+        }
+
+        main();
+      })();
+    </script>
+  </body>
+</html>
